@@ -1,0 +1,21 @@
+{
+  "name": "hostprofit-mcp",
+  "version": "1.0.7",
+  "description": "STR revenue intelligence MCP server — audit any Airbnb listing for dollar-denominated revenue gaps. Free tier included.",
+  "bin": { "hostprofit-mcp": "./index.js" },
+  "main": "./index.js",
+  "type": "module",
+  "files": ["index.js", "index.ts", "tsconfig.json", "README.md"],
+  "engines": { "node": ">=18.0.0" },
+  "keywords": ["mcp", "airbnb", "str", "vacation-rental", "revenue", "pricing"],
+  "author": "Erwan Le Roy <erwan@hostprofit.ai>",
+  "license": "UNLICENSED",
+  "homepage": "https://hostprofit.ai",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}
