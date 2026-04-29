@@ -1,5 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 import http from "http";
 
@@ -10,6 +10,14 @@ async function call(u, apiKey) {
   if (apiKey) h["Authorization"] = "Bearer " + apiKey;
   const r = await fetch(ENDPOINT, { method: "POST", headers: h, body: JSON.stringify({ listing_url: u }) });
   return r.json();
+}
+
+async function getBody(req) {
+  return new Promise((resolve) => {
+    let body = "";
+    req.on("data", chunk => body += chunk);
+    req.on("end", () => { try { resolve(JSON.parse(body)); } catch { resolve({}); } });
+  });
 }
 
 const server = new McpServer({ name: "hostprofit", version: "1.0.7" });
@@ -63,21 +71,15 @@ server.tool("get_action_plan",
   }
 );
 
-const transports = {};
 const httpServer = http.createServer(async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization, Mcp-Session-Id");
   if (req.method === "OPTIONS") { res.writeHead(200); res.end(); return; }
-  if (req.url === "/sse" && req.method === "GET") {
-    const transport = new SSEServerTransport("/messages", res);
-    transports[transport.sessionId] = transport;
+  if (req.url === "/mcp") {
+    const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     await server.connect(transport);
-  } else if (req.url?.startsWith("/messages") && req.method === "POST") {
-    const sessionId = new URL(req.url, "http://x").searchParams.get("sessionId");
-    const transport = transports[sessionId];
-    if (transport) await transport.handlePostMessage(req, res);
-    else { res.writeHead(404); res.end(); }
+    await transport.handleRequest(req, res, await getBody(req));
   } else {
     res.writeHead(200); res.end("HostProfit MCP running");
   }
