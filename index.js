@@ -23,9 +23,9 @@ server.tool("analyze_listing",
     const cats = Object.entries(d.categories || {})
       .map(([k, v]) => "  " + k + ": " + v.grade + " - $" + v.monthly_loss + "/mo")
       .join("\n");
-    const locked = d.top_actions === "🔒";
+    const locked = d.top_actions === "LOCKED";
     const actionText = locked
-      ? "ACTION PLAN: 🔒 " + d.upgrade_message
+      ? "ACTION PLAN: LOCKED - " + d.upgrade_message
       : "TOP ACTIONS:\n" + (Array.isArray(d.top_actions)
           ? d.top_actions.map((a, i) => (i+1) + ". " + a.category + " - " + a.action + " (" + a.dollar_impact + ")").join("\n")
           : "");
@@ -46,7 +46,7 @@ server.tool("get_revenue_gap",
     const d = await call(listing_url, apiKey);
     const top = Object.entries(d.categories || {}).sort((a, b) => b[1].monthly_loss - a[1].monthly_loss)[0];
     const text = d.upgrade_message
-      ? d.listing_name + " in " + d.location + " is losing $" + d.monthly_revenue_gap + "/month.\n\n🔒 " + d.upgrade_message
+      ? d.listing_name + " in " + d.location + " is losing $" + d.monthly_revenue_gap + "/month. Score: " + d.overall_score + "/10. Upgrade at hostprofit.ai/pricing"
       : d.listing_name + " in " + d.location + " is losing $" + d.monthly_revenue_gap + "/month. Biggest issue: " + (top ? top[0] + " costing $" + top[1].monthly_loss + "/mo" : "unknown");
     return { content: [{ type: "text", text }] };
   }
@@ -58,5 +58,31 @@ server.tool("get_action_plan",
   async ({ listing_url }, { authInfo }) => {
     const apiKey = authInfo?.token || process.env.HOSTPROFIT_API_KEY;
     const d = await call(listing_url, apiKey);
-    const text = d.top_actions === "🔒"
-      ? "🔒 Unlock at hostprofit.ai/pricing - losing
+    const text = d.top_actions === "LOCKED"
+      ? "Unlock at hostprofit.ai/pricing - losing $" + d.monthly_revenue_gap + "/mo. $58/listing/month."
+      : Array.isArray(d.top_actions)
+        ? d.top_actions.map((a, i) => (i+1) + ". Fix " + a.category + " - " + a.action + " - " + a.dollar_impact).join("\n")
+        : "No actions available";
+    return { content: [{ type: "text", text }] };
+  }
+);
+
+const transports = {};
+const httpServer = http.createServer(async (req, res) => {
+  if (req.url === "/sse" && req.method === "GET") {
+    const transport = new SSEServerTransport("/messages", res);
+    transports[transport.sessionId] = transport;
+    await server.connect(transport);
+  } else if (req.url?.startsWith("/messages") && req.method === "POST") {
+    const sessionId = new URL(req.url, "http://x").searchParams.get("sessionId");
+    const transport = transports[sessionId];
+    if (transport) await transport.handlePostMessage(req, res);
+    else { res.writeHead(404); res.end(); }
+  } else {
+    res.writeHead(200);
+    res.end("HostProfit MCP running");
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+httpServer.listen(PORT, () => console.log("HostProfit MCP on port " + PORT));
